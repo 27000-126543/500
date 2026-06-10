@@ -535,20 +535,29 @@ export const useAppStore = create<AppState>((set, get) => ({
     const unqualifiedCount = workInspections.filter((i) => i.overallResult === 'fail').length;
     const unqualifiedRate = inspectionCount > 0 ? (unqualifiedCount / inspectionCount) * 100 : 0;
 
-    const resolvedAlerts = workAlerts.filter((a) => a.resolved && a.handlingDurationMinutes);
-    const alertAvgHandlingMinutes = resolvedAlerts.length > 0
-      ? Math.round(resolvedAlerts.reduce((sum, a) => sum + (a.handlingDurationMinutes || 0), 0) / resolvedAlerts.length)
-      : 0;
+    const coldStorageAlertList = scopeAll
+      ? coldStorages.flatMap((cs) => [
+          ...cs.alertHistory,
+          ...(cs.currentAlert ? [cs.currentAlert] : []),
+        ])
+      : [];
+    const coldStorageAlerts = coldStorageAlertList.length;
+    const coldStorageEscalated = coldStorageAlertList.reduce(
+      (sum, a) => sum + (a.escalationRecords?.length || 0),
+      0
+    );
+    const nonColdStorageEscalated = workAlerts
+      .filter((a) => a.type !== 'coldstorage')
+      .reduce((sum, a) => sum + (a.escalationRecords?.length || 0), 0);
 
-    const coldStorageAlerts = scopeAll
-      ? coldStorages.reduce((sum, cs) => sum + cs.alertHistory.length + (cs.currentAlert ? 1 : 0), 0)
-      : 0;
-    const coldStorageEscalated = scopeAll
-      ? coldStorages.reduce(
-          (sum, cs) => sum + cs.alertHistory.filter((a) => a.escalationCount > 0).length +
-            (cs.currentAlert?.escalationCount ? 1 : 0),
-          0
-        )
+    const resolvedAlertsWithDuration = workAlerts.filter((a) => a.resolved && a.handlingDurationMinutes);
+    const coldResolvedWithDuration = coldStorageAlertList.filter((a) => a.handlingDurationMinutes);
+    const allDurations = [
+      ...resolvedAlertsWithDuration.map((a) => a.handlingDurationMinutes || 0),
+      ...coldResolvedWithDuration.map((a) => a.handlingDurationMinutes || 0),
+    ];
+    const alertAvgHandlingMinutes = allDurations.length > 0
+      ? Math.round(allDurations.reduce((sum, d) => sum + d, 0) / allDurations.length)
       : 0;
 
     const report: DailyReport = {
@@ -563,7 +572,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       unqualifiedRate,
       emergencyCount: workAlerts.filter((a) => a.level === 'critical' && a.type === 'fire').length,
       alertCount: workAlerts.length,
-      alertEscalatedCount: workAlerts.filter((a) => a.escalationCount > 0).length,
+      alertEscalatedCount: coldStorageEscalated + nonColdStorageEscalated,
       alertAvgHandlingMinutes,
       restockRequestCount: workRestocks.length,
       restockApprovedCount: workRestocks.filter((r) => r.status === 'approved').length,

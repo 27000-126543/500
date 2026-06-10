@@ -26,6 +26,7 @@ export default function Scene() {
     fireEmergencyActive,
     setSelectedObject,
     simulateDataUpdate,
+    currentUser,
   } = useAppStore();
 
   useEffect(() => {
@@ -84,14 +85,20 @@ export default function Scene() {
 
           <HeatmapOverlay stalls={stalls} visible={heatmapVisible} />
 
-          {stalls.map((stall) => (
-            <MarketStall
-              key={stall.id}
-              stall={stall}
-              onClick={handleStallClick}
-              selected={selectedObjectId === stall.id}
-            />
-          ))}
+          {stalls.map((stall) => {
+            const isMerchant = currentUser?.role === 'merchant';
+            const isOwnStall = isMerchant && stall.merchantId === currentUser?.id;
+            const maskedSensitiveData = isMerchant && !isOwnStall;
+            return (
+              <MarketStall
+                key={stall.id}
+                stall={stall}
+                onClick={handleStallClick}
+                selected={selectedObjectId === stall.id}
+                maskedSensitiveData={maskedSensitiveData}
+              />
+            );
+          })}
 
           {coldStorages.map((cs, i) => (
             <ColdStorageUnit

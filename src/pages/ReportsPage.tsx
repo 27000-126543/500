@@ -55,9 +55,15 @@ export default function ReportsPage() {
     ...(cs.currentAlert ? [cs.currentAlert] : []),
   ]);
   const coldStorageAlertCount = coldStorageAlertList.length;
-  const coldStorageEscalatedCount = coldStorageAlertList.filter((a) => a.escalationCount > 0).length;
+  const coldStorageEscalatedCount = coldStorageAlertList.reduce(
+    (sum, a) => sum + (a.escalationRecords?.length || 0),
+    0
+  );
+  const nonColdStorageEscalatedCount = workAlerts
+    .filter((a) => a.type !== 'coldstorage')
+    .reduce((sum, a) => sum + (a.escalationRecords?.length || 0), 0);
 
-  const alertEscalatedCount = workAlerts.filter((a) => a.escalationCount > 0).length + coldStorageEscalatedCount;
+  const alertEscalatedCount = coldStorageEscalatedCount + nonColdStorageEscalatedCount;
 
   const resolvedAlertsWithDuration = workAlerts.filter((a) => a.resolved && a.handlingDurationMinutes);
   const coldResolvedWithDuration = coldStorageAlertList.filter((a) => a.handlingDurationMinutes);
@@ -169,7 +175,7 @@ export default function ReportsPage() {
               value={alertEscalatedCount}
               subInfo={
                 <p className="text-[10px] text-gray-400 mt-0.5">
-                  预警 {workAlerts.filter((a) => a.escalationCount > 0).length} · 冷库 {coldStorageEscalatedCount}
+                其他预警 {nonColdStorageEscalatedCount} · 冷库 {coldStorageEscalatedCount}
                 </p>
               }
               icon={TrendingUp}
@@ -231,7 +237,7 @@ export default function ReportsPage() {
                 <span className="text-[10px] px-2 py-1 rounded bg-accent-green/20 text-accent-green">今日</span>
               </div>
               <div className="h-64">
-                <SalesChart />
+                <SalesChart stalls={workStalls} />
               </div>
             </div>
 

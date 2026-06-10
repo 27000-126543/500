@@ -1,5 +1,7 @@
 import { RestockRequest, RecallOrder, User, UserRole, RESTOCK_STEP_ROLES, RECALL_STEP_ROLES } from '../types';
 
+export { RESTOCK_STEP_ROLES, RECALL_STEP_ROLES };
+
 export const getNextRestockStatus = (
   currentStatus: RestockRequest['status'],
   role: UserRole

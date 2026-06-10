@@ -9,6 +9,7 @@ interface MarketStallProps {
   stall: Stall;
   onClick?: (stall: Stall) => void;
   selected?: boolean;
+  maskedSensitiveData?: boolean;
 }
 
 const categoryColors: Record<string, string> = {
@@ -19,7 +20,7 @@ const categoryColors: Record<string, string> = {
   grain: '#FFC107',
 };
 
-export default function MarketStall({ stall, onClick, selected }: MarketStallProps) {
+export default function MarketStall({ stall, onClick, selected, maskedSensitiveData }: MarketStallProps) {
   const meshRef = useRef<THREE.Mesh>(null);
   const glowRef = useRef<THREE.Mesh>(null);
   const [hovered, setHovered] = useState(false);
@@ -100,7 +101,7 @@ export default function MarketStall({ stall, onClick, selected }: MarketStallPro
       <FloatingLabel
         position={[0, 0, 0]}
         title={stall.name}
-        subtitle={`库存:${stall.inventory} | 客流:${stall.passengerHeat}%`}
+        subtitle={maskedSensitiveData ? '***' : `库存:${stall.inventory} | 客流:${stall.passengerHeat}%`}
         color={statusColor}
         blink={blinkType}
       />

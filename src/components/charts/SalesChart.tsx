@@ -1,8 +1,14 @@
 import ReactECharts from 'echarts-for-react';
 import { useAppStore } from '../../store/useAppStore';
+import { Stall } from '../../types';
 
-export default function SalesChart() {
-  const stalls = useAppStore((s) => s.stalls);
+interface SalesChartProps {
+  stalls?: Stall[];
+}
+
+export default function SalesChart({ stalls: stallsProp }: SalesChartProps) {
+  const storeStalls = useAppStore((s) => s.stalls);
+  const stalls = stallsProp ?? storeStalls;
   const categoryMap: Record<string, string> = {
     vegetable: '蔬菜',
     meat: '肉类',
