@@ -138,20 +138,22 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (user) {
       if (user.role === 'merchant') {
         filteredStalls = stalls.filter((s) => s.merchantId === user.id);
-        filteredRestockRequests = restockRequests.filter((r) => canViewRestock(r, user) && !r.archived);
-        filteredRecallOrders = recallOrders.filter((r) => canViewRecall(r, user) && !r.archived);
+        const stallIds = filteredStalls.map((s) => s.id);
+        filteredRestockRequests = restockRequests.filter((r) => canViewRestock(r, user));
+        filteredRecallOrders = recallOrders.filter((r) => canViewRecall(r, user));
         filteredAlerts = alerts.filter(
           (a) => !a.archived && a.visibleToRoles.includes(user.role) &&
-            (a.type === 'inventory' || a.type === 'inspection')
+            (a.type === 'inventory' || a.type === 'inspection') &&
+            stallIds.includes(a.targetId)
         );
       } else {
-        filteredRestockRequests = restockRequests.filter((r) => !r.archived);
-        filteredRecallOrders = recallOrders.filter((r) => !r.archived);
+        filteredRestockRequests = restockRequests;
+        filteredRecallOrders = recallOrders;
         filteredAlerts = alerts.filter((a) => !a.archived && a.visibleToRoles.includes(user.role));
       }
     } else {
-      filteredRestockRequests = restockRequests.filter((r) => !r.archived);
-      filteredRecallOrders = recallOrders.filter((r) => !r.archived);
+      filteredRestockRequests = restockRequests;
+      filteredRecallOrders = recallOrders;
       filteredAlerts = alerts.filter((a) => !a.archived);
     }
 
@@ -525,7 +527,15 @@ export const useAppStore = create<AppState>((set, get) => ({
     const workInspections = scopeAll
       ? inspections
       : inspections.filter((i) => workStalls.some((s) => s.id === i.stallId));
-    const workAlerts = scopeAll ? alerts : filteredAlerts;
+    const workStallIds = workStalls.map((s) => s.id);
+    const workAlerts = scopeAll
+      ? alerts
+      : filteredAlerts.filter((a) => {
+          if (a.type === 'inventory' || a.type === 'inspection') {
+            return workStallIds.includes(a.targetId);
+          }
+          return true;
+        });
     const workRestocks = scopeAll ? restockRequests : filteredRestockRequests;
     const workRecalls = scopeAll ? recallOrders : filteredRecallOrders;
 

@@ -40,6 +40,11 @@ export default function Scene() {
   const activeFireAlarm = fireAlarms[0];
 
   const handleStallClick = (stall: Stall) => {
+    const isMerchant = currentUser?.role === 'merchant';
+    const isOwnStall = isMerchant && stall.merchantId === currentUser?.id;
+    if (isMerchant && !isOwnStall) {
+      return;
+    }
     setSelectedObject(selectedObjectId === stall.id ? null : stall.id);
   };
 

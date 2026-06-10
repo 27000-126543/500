@@ -30,20 +30,33 @@ export default function MarketStall({ stall, onClick, selected, maskedSensitiveD
   useFrame((state) => {
     if (glowRef.current) {
       const mat = glowRef.current.material as THREE.MeshBasicMaterial;
-      const pulse = 0.3 + Math.sin(state.clock.elapsedTime * 3) * 0.2;
-      mat.opacity = stall.status === 'unqualified' || stall.status === 'lowStock' ? pulse : 0.15;
+      if (maskedSensitiveData) {
+        mat.opacity = 0.15;
+      } else {
+        const pulse = 0.3 + Math.sin(state.clock.elapsedTime * 3) * 0.2;
+        mat.opacity = stall.status === 'unqualified' || stall.status === 'lowStock' ? pulse : 0.15;
+      }
     }
   });
 
-  const statusColor =
-    stall.status === 'unqualified'
-      ? '#FF3D57'
-      : stall.status === 'lowStock'
-      ? '#FF8C00'
-      : baseColor;
+  const statusColor = maskedSensitiveData
+    ? baseColor
+    : stall.status === 'unqualified'
+    ? '#FF3D57'
+    : stall.status === 'lowStock'
+    ? '#FF8C00'
+    : baseColor;
 
-  const blinkType =
-    stall.status === 'unqualified' ? 'red' : stall.status === 'lowStock' ? 'orange' : null;
+  const displayHeatColor = maskedSensitiveData ? baseColor : heatColor;
+  const emissiveIntensity = maskedSensitiveData ? 0 : 0.3;
+
+  const blinkType = maskedSensitiveData
+    ? null
+    : stall.status === 'unqualified'
+    ? 'red'
+    : stall.status === 'lowStock'
+    ? 'orange'
+    : null;
 
   return (
     <group position={[stall.position.x, stall.position.y, stall.position.z]}>
@@ -74,7 +87,7 @@ export default function MarketStall({ stall, onClick, selected, maskedSensitiveD
 
       <mesh position={[0, 1.05, 0]}>
         <boxGeometry args={[1.55, 0.05, 1.55]} />
-        <meshStandardMaterial color={heatColor} emissive={heatColor} emissiveIntensity={0.3} transparent opacity={0.8} />
+        <meshStandardMaterial color={displayHeatColor} emissive={displayHeatColor} emissiveIntensity={emissiveIntensity} transparent opacity={0.8} />
       </mesh>
 
       {(hovered || selected || blinkType) && (

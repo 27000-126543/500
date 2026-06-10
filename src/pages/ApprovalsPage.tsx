@@ -37,6 +37,11 @@ export default function ApprovalsPage() {
     return restockRequests.filter((r) => {
       if (userRole === 'supervisor') return false;
       const isFinal = RESTOCK_FINAL_STATUSES.includes(r.status as any);
+      if (userRole === 'director') {
+        const directorHandled = r.approvalLogs?.some((log) => log.role === 'director');
+        if (isFinal) return directorHandled;
+        return directorHandled && r.currentHandlerRole !== userRole;
+      }
       const movedAway = !isFinal && r.currentHandlerRole !== userRole;
       if (userRole === 'merchant') {
         return (isFinal || movedAway) && r.merchantId === currentUser?.id;
