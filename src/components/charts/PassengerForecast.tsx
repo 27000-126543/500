@@ -1,11 +1,33 @@
 import ReactECharts from 'echarts-for-react';
 import { passengerForecast } from '../../data/mockData';
 
-export default function PassengerForecast() {
-  const hours = ['08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00'];
+interface PassengerForecastProps {
+  scopeLabel?: string;
+  hourlyData?: number[];
+  hours?: string[];
+}
 
-  const option = {
+export default function PassengerForecast({ scopeLabel, hourlyData, hours }: PassengerForecastProps) {
+  const defaultHours = ['08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00'];
+  const finalHours = hours ?? defaultHours;
+  const finalHourlyData = hourlyData ?? passengerForecast.hourly;
+
+  const option: any = {
     backgroundColor: 'transparent',
+    ...(scopeLabel
+      ? {
+          title: {
+            text: '',
+            subtext: `统计范围：${scopeLabel}`,
+            left: 0,
+            top: 0,
+            subtextStyle: {
+              color: '#64748b',
+              fontSize: 10,
+            },
+          },
+        }
+      : {}),
     tooltip: {
       trigger: 'axis',
       backgroundColor: 'rgba(10, 22, 40, 0.9)',
@@ -19,12 +41,12 @@ export default function PassengerForecast() {
     grid: {
       left: 50,
       right: 20,
-      top: 20,
+      top: scopeLabel ? 35 : 20,
       bottom: 25,
     },
     xAxis: {
       type: 'category',
-      data: hours,
+      data: finalHours,
       axisLine: { lineStyle: { color: '#1e3a5f' } },
       axisLabel: { color: '#94a3b8', fontSize: 11 },
     },
@@ -41,7 +63,7 @@ export default function PassengerForecast() {
       {
         type: 'line',
         smooth: true,
-        data: passengerForecast.hourly,
+        data: finalHourlyData,
         lineStyle: {
           width: 3,
           color: {

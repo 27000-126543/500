@@ -9,6 +9,7 @@ import {
   Flame,
   FlameKindling,
   Shield,
+  ShieldCheck,
 } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
 import { UserRole, PermissionConst } from '../../types';
@@ -42,6 +43,7 @@ export default function TopBar() {
   const navItems = [
     { path: '/dashboard', label: '3D全景', icon: LayoutDashboard, visible: canAccessPage('dashboard') },
     { path: '/approvals', label: '审批中心', icon: ClipboardCheck, visible: canAccessPage('approvals') },
+    { path: '/audit', label: '权限审计', icon: ShieldCheck, visible: hasPermission(PermissionConst.VIEW_APPROVALS_ALL) },
     { path: '/reports', label: '数据统计', icon: BarChart3, visible: canAccessPage('reports') },
   ].filter((item) => item.visible);
 

@@ -3,10 +3,11 @@ import LoginPage from '@/pages/LoginPage';
 import DashboardPage from '@/pages/DashboardPage';
 import ApprovalsPage from '@/pages/ApprovalsPage';
 import ReportsPage from '@/pages/ReportsPage';
+import AuditPage from '@/pages/AuditPage';
 import { useAppStore } from '@/store/useAppStore';
 import { Lock, ArrowLeft, ShieldAlert } from 'lucide-react';
 
-type PageName = 'dashboard' | 'approvals' | 'reports';
+type PageName = 'dashboard' | 'approvals' | 'reports' | 'audit';
 
 function PrivateRoute({ children, page }: { children: React.ReactNode; page: PageName }) {
   const currentUser = useAppStore((s) => s.currentUser);
@@ -104,6 +105,14 @@ export default function App() {
           element={
             <PrivateRoute page="reports">
               <ReportsPage />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/audit"
+          element={
+            <PrivateRoute page="audit">
+              <AuditPage />
             </PrivateRoute>
           }
         />

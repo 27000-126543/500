@@ -39,6 +39,10 @@ export default function Scene() {
   const unacknowledgedAlerts = alerts.filter((a) => !a.acknowledged).length;
   const activeFireAlarm = fireAlarms[0];
 
+  const maskedStallIds = currentUser?.role === 'merchant'
+    ? stalls.filter((s) => s.merchantId !== currentUser.id).map((s) => s.id)
+    : undefined;
+
   const handleStallClick = (stall: Stall) => {
     const isMerchant = currentUser?.role === 'merchant';
     const isOwnStall = isMerchant && stall.merchantId === currentUser?.id;
@@ -88,7 +92,7 @@ export default function Scene() {
             <gridHelper args={[60, 60, '#1e3a5f', '#0e2340']} />
           </mesh>
 
-          <HeatmapOverlay stalls={stalls} visible={heatmapVisible} />
+          <HeatmapOverlay stalls={stalls} visible={heatmapVisible} maskedStallIds={maskedStallIds} />
 
           {stalls.map((stall) => {
             const isMerchant = currentUser?.role === 'merchant';

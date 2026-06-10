@@ -14,6 +14,8 @@ import {
   TrendingUp,
   CheckCircle2,
   AlertTriangle,
+  FileSpreadsheet,
+  Download,
 } from 'lucide-react';
 import { weatherForecast, passengerForecast } from '../data/mockData';
 import { useAppStore } from '../store/useAppStore';
@@ -40,10 +42,27 @@ export default function DashboardPage() {
   const hasPermission = useAppStore((s) => s.hasPermission);
   const resolveColdStorageAlert = useAppStore((s) => s.resolveColdStorageAlert);
   const setSelectedObject = useAppStore((s) => s.setSelectedObject);
+  const currentUser = useAppStore((s) => s.currentUser);
+  const exportOperationReport = useAppStore((s) => s.exportOperationReport);
+  const exportEmergencyReport = useAppStore((s) => s.exportEmergencyReport);
 
   const { filteredStalls } = useMemo(() => getFilteredData(), [getFilteredData]);
+
+  const scopeLabel = useMemo(() => {
+    if (!currentUser) return '全市场';
+    if (currentUser.role === 'merchant' && filteredStalls.length > 0) {
+      return `${currentUser.name} · ${filteredStalls[0].name}`;
+    }
+    return '全市场';
+  }, [currentUser, filteredStalls]);
   const canManageColdStorage = hasPermission(PermissionConst.MANAGE_COLDSTORAGE);
   const canViewColdStorage = canManageColdStorage || hasPermission(PermissionConst.VIEW_EMERGENCY_STATS);
+  const canExportAll = hasPermission(PermissionConst.EXPORT_REPORT_ALL);
+  const canExportOwn = hasPermission(PermissionConst.EXPORT_REPORT_OWN);
+  const showExportButton = canExportAll || canExportOwn;
+  const canViewEmergency = hasPermission(PermissionConst.VIEW_EMERGENCY_STATS) || canExportAll;
+  const operationButtonText = canExportAll ? '导出全市场运营日报' : '导出我的摊位运营日报';
+  const emergencyButtonText = canExportAll ? '导出全市场应急日报' : '导出我的摊位应急日报';
 
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
@@ -125,6 +144,32 @@ export default function DashboardPage() {
               </div>
             </div>
           </div>
+
+          {showExportButton && (
+            <div className="rounded-lg bg-bg-glass backdrop-blur-md border border-accent-cyan/20 p-4">
+              <p className="text-[10px] font-tech text-accent-cyan tracking-widest mb-3">EXPORT · 日报导出</p>
+              <div className="space-y-2">
+                <button
+                  onClick={exportOperationReport}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-accent-green to-accent-cyan text-white font-medium text-xs shadow-glow-green hover:shadow-lg transition-all"
+                >
+                  <FileSpreadsheet size={14} />
+                  {operationButtonText}
+                  <Download size={12} />
+                </button>
+                {canViewEmergency && (
+                  <button
+                    onClick={exportEmergencyReport}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-accent-orange to-accent-red text-white font-medium text-xs shadow-glow-orange hover:shadow-lg transition-all"
+                  >
+                    <AlertTriangle size={14} />
+                    {emergencyButtonText}
+                    <Download size={12} />
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
 
           {canViewColdStorage && warningColdStorages.length > 0 && (
             <div className="rounded-lg bg-bg-glass backdrop-blur-md border border-accent-orange/40 shadow-glow-orange p-4">
@@ -211,11 +256,14 @@ export default function DashboardPage() {
 
           <div className="rounded-lg bg-bg-glass backdrop-blur-md border border-accent-cyan/20 p-4">
             <div className="flex items-center justify-between mb-3">
-              <p className="text-[10px] font-tech text-accent-cyan tracking-widest">SALES · 分类销售</p>
+              <div>
+                <p className="text-[10px] font-tech text-accent-cyan tracking-widest">SALES · 分类销售</p>
+                <p className="text-[9px] text-gray-500 mt-0.5">统计范围：{scopeLabel}</p>
+              </div>
               <span className="text-[10px] text-accent-green">今日</span>
             </div>
             <div className="h-48">
-              <SalesChart />
+              <SalesChart stalls={filteredStalls} scopeLabel={scopeLabel} />
             </div>
           </div>
 

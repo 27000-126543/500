@@ -4,9 +4,10 @@ import { Stall } from '../../types';
 
 interface SalesChartProps {
   stalls?: Stall[];
+  scopeLabel?: string;
 }
 
-export default function SalesChart({ stalls: stallsProp }: SalesChartProps) {
+export default function SalesChart({ stalls: stallsProp, scopeLabel }: SalesChartProps) {
   const storeStalls = useAppStore((s) => s.stalls);
   const stalls = stallsProp ?? storeStalls;
   const categoryMap: Record<string, string> = {
@@ -23,8 +24,22 @@ export default function SalesChart({ stalls: stallsProp }: SalesChartProps) {
     return acc;
   }, {} as Record<string, number>);
 
-  const option = {
+  const option: any = {
     backgroundColor: 'transparent',
+    ...(scopeLabel
+      ? {
+          title: {
+            text: '',
+            subtext: `统计范围：${scopeLabel}`,
+            left: 0,
+            top: 0,
+            subtextStyle: {
+              color: '#64748b',
+              fontSize: 10,
+            },
+          },
+        }
+      : {}),
     tooltip: {
       trigger: 'axis',
       backgroundColor: 'rgba(10, 22, 40, 0.9)',
@@ -38,7 +53,7 @@ export default function SalesChart({ stalls: stallsProp }: SalesChartProps) {
     grid: {
       left: 50,
       right: 20,
-      top: 20,
+      top: scopeLabel ? 35 : 20,
       bottom: 30,
     },
     xAxis: {

@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import TopBar from '../components/layout/TopBar';
 import SalesChart from '../components/charts/SalesChart';
 import PassengerForecast from '../components/charts/PassengerForecast';
@@ -22,12 +23,20 @@ import {
 } from 'lucide-react';
 
 export default function ReportsPage() {
-  const { stalls, inspections, alerts, parkingSpots, coldStorages, exportReport, hasPermission, getFilteredData } = useAppStore();
+  const { stalls, inspections, alerts, parkingSpots, coldStorages, exportOperationReport, exportEmergencyReport, hasPermission, getFilteredData, currentUser } = useAppStore();
 
   const scopeAll = hasPermission(PermissionConst.VIEW_REPORTS_ALL);
   const { filteredStalls, filteredAlerts, filteredRestockRequests, filteredRecallOrders } = getFilteredData();
 
   const workStalls = scopeAll ? stalls : filteredStalls;
+
+  const scopeLabel = useMemo(() => {
+    if (!currentUser) return '全市场';
+    if (currentUser.role === 'merchant' && workStalls.length > 0) {
+      return `${currentUser.name} · ${workStalls[0].name}`;
+    }
+    return '全市场';
+  }, [currentUser, workStalls]);
   const workInspections = scopeAll
     ? inspections
     : inspections.filter((i) => workStalls.some((s) => s.id === i.stallId));
@@ -81,7 +90,9 @@ export default function ReportsPage() {
   const canExportAll = hasPermission(PermissionConst.EXPORT_REPORT_ALL);
   const canExportOwn = hasPermission(PermissionConst.EXPORT_REPORT_OWN);
   const showExportButton = canExportAll || canExportOwn;
-  const exportButtonText = canExportAll ? '导出全市场日报' : '导出我的摊位日报';
+  const canViewEmergency = hasPermission(PermissionConst.VIEW_EMERGENCY_STATS) || canExportAll;
+  const operationButtonText = canExportAll ? '导出全市场运营日报' : '导出我的摊位运营日报';
+  const emergencyButtonText = canExportAll ? '导出全市场应急日报' : '导出我的摊位应急日报';
 
   return (
     <div className="min-h-screen bg-bg-primary text-white">
@@ -94,14 +105,26 @@ export default function ReportsPage() {
               <p className="text-sm text-gray-400">运营数据汇总、趋势分析与日报导出</p>
             </div>
             {showExportButton && (
-              <button
-                onClick={exportReport}
-                className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-accent-green to-accent-cyan text-white font-medium text-sm shadow-glow-green hover:shadow-lg transition-all"
-              >
-                <FileSpreadsheet size={18} />
-                {exportButtonText}
-                <Download size={16} />
-              </button>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={exportOperationReport}
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-accent-green to-accent-cyan text-white font-medium text-sm shadow-glow-green hover:shadow-lg transition-all"
+                >
+                  <FileSpreadsheet size={18} />
+                  {operationButtonText}
+                  <Download size={16} />
+                </button>
+                {canViewEmergency && (
+                  <button
+                    onClick={exportEmergencyReport}
+                    className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-accent-orange to-accent-red text-white font-medium text-sm shadow-glow-orange hover:shadow-lg transition-all"
+                  >
+                    <AlertTriangle size={18} />
+                    {emergencyButtonText}
+                    <Download size={16} />
+                  </button>
+                )}
+              </div>
             )}
           </div>
 
@@ -233,11 +256,12 @@ export default function ReportsPage() {
                 <div>
                   <p className="text-xs font-tech text-accent-cyan tracking-widest mb-0.5">SALES TREND</p>
                   <h3 className="text-base font-medium text-white">分类销售统计</h3>
+                  <p className="text-[10px] text-gray-500 mt-0.5">统计范围：{scopeLabel}</p>
                 </div>
                 <span className="text-[10px] px-2 py-1 rounded bg-accent-green/20 text-accent-green">今日</span>
               </div>
               <div className="h-64">
-                <SalesChart stalls={workStalls} />
+                <SalesChart stalls={workStalls} scopeLabel={scopeLabel} />
               </div>
             </div>
 
@@ -246,11 +270,12 @@ export default function ReportsPage() {
                 <div>
                   <p className="text-xs font-tech text-accent-cyan tracking-widest mb-0.5">PASSENGER FORECAST</p>
                   <h3 className="text-base font-medium text-white">客流趋势预测</h3>
+                  <p className="text-[10px] text-gray-500 mt-0.5">统计范围：{scopeLabel}</p>
                 </div>
                 <span className="text-[10px] px-2 py-1 rounded bg-accent-orange/20 text-accent-orange">今日 +12.5%</span>
               </div>
               <div className="h-64">
-                <PassengerForecast />
+                <PassengerForecast scopeLabel={scopeLabel} />
               </div>
             </div>
           </div>

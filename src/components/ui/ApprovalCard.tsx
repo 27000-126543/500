@@ -1,7 +1,8 @@
+import { useState } from 'react';
 import { RestockRequest, RecallOrder } from '../../types';
 import { getRestockProgress, getRecallProgress, canApproveRestock, canSignRecall, ROLE_LABELS } from '../../utils/approvalEngine';
 import { useAppStore } from '../../store/useAppStore';
-import { User, Check, X, Clock, ChevronRight, Package, AlertTriangle, Calendar, FileText, Box } from 'lucide-react';
+import { User, Check, X, Clock, ChevronRight, ChevronDown, ChevronUp, Package, AlertTriangle, Calendar, FileText, Box, Archive, Flag } from 'lucide-react';
 
 interface ApprovalCardProps {
   item: RestockRequest | RecallOrder;
@@ -43,8 +44,33 @@ const shelfStatusLabels: Record<string, { label: string; color: string }> = {
   archived: { label: '已归档', color: '#6B7280' },
 };
 
+const actionLabels: Record<string, string> = {
+  pending_merchant: '提交申请',
+  pending_admin: '商户确认',
+  pending_director: '管理员审核',
+  approved: '主任终审通过',
+  rejected: '驳回',
+  pending_inspector: '检测员确认',
+  pending_supervisor: '食药监会签',
+  completed: '完成',
+  cancelled: '取消',
+};
+
+function formatDuration(from: Date): string {
+  const now = new Date();
+  const diffMs = now.getTime() - new Date(from).getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  if (diffMins < 60) {
+    return `${diffMins}分钟`;
+  }
+  const hours = Math.floor(diffMins / 60);
+  const mins = diffMins % 60;
+  return `${hours}小时${mins}分钟`;
+}
+
 export default function ApprovalCard({ item, type }: ApprovalCardProps) {
   const { currentUser, approveRestock, rejectRestock, signRecall, rejectRecall } = useAppStore();
+  const [expanded, setExpanded] = useState(false);
   const isRestock = type === 'restock';
   const progress = isRestock
     ? getRestockProgress((item as RestockRequest).status)
@@ -70,6 +96,14 @@ export default function ApprovalCard({ item, type }: ApprovalCardProps) {
   const isTerminalStatus = isRestock
     ? (item.status === 'approved' || item.status === 'rejected')
     : (item.status === 'completed' || item.status === 'cancelled');
+  const logs = isRestock
+    ? (item as RestockRequest).approvalLogs
+    : (item as RecallOrder).signLogs;
+
+  const lastLog = logs && logs.length > 0 ? logs[logs.length - 1] : null;
+  const lastHandlerName = lastLog?.approver || '暂无';
+  const lastHandlerRoleLabel = lastLog ? ROLE_LABELS[lastLog.role] : '';
+  const waitDuration = lastLog ? formatDuration(lastLog.time) : formatDuration(item.createTime);
 
   const handleApprove = () => {
     if (isRestock) approveRestock(item.id);
@@ -84,21 +118,35 @@ export default function ApprovalCard({ item, type }: ApprovalCardProps) {
   const restockItem = item as RestockRequest;
   const recallItem = item as RecallOrder;
 
+  const showTimeline = isTerminalStatus || item.archived;
+
   return (
     <div
       className="rounded-lg bg-bg-glass backdrop-blur-md p-4 border hover:border-accent-cyan/50 transition-all"
       style={{ borderColor: `${statusColor}40` }}
     >
-      <div className="flex items-start justify-between mb-3">
-        <div>
-          <p className="text-sm font-medium text-white mb-1">{title}</p>
+      <div
+        className={`flex items-start justify-between mb-3 ${showTimeline ? 'cursor-pointer select-none' : ''}`}
+        onClick={showTimeline ? () => setExpanded(!expanded) : undefined}
+      >
+        <div className="flex-1">
+          <div className="flex items-center gap-2">
+            <p className="text-sm font-medium text-white mb-1">{title}</p>
+            {showTimeline && (
+              expanded ? (
+                <ChevronUp size={14} className="text-gray-400 mb-1" />
+              ) : (
+                <ChevronDown size={14} className="text-gray-400 mb-1" />
+              )
+            )}
+          </div>
           <p className="text-xs text-gray-400">{subInfo}</p>
           <p className="text-[10px] text-gray-500 mt-1">
             创建时间：{new Date(item.createTime).toLocaleString('zh-CN')}
           </p>
         </div>
         <span
-          className="text-[11px] px-2 py-1 rounded font-medium"
+          className="text-[11px] px-2 py-1 rounded font-medium shrink-0"
           style={{
             backgroundColor: `${statusColor}20`,
             color: statusColor,
@@ -139,6 +187,27 @@ export default function ApprovalCard({ item, type }: ApprovalCardProps) {
               </span>
             )}
           </div>
+          {!isTerminalStatus && (
+            <>
+              <div className="flex items-center gap-2 text-[11px]">
+                <User size={12} className="text-accent-cyan shrink-0" />
+                <span className="text-gray-400">上一处理人：</span>
+                <span className="font-medium text-gray-300">
+                  {lastHandlerName}
+                  {lastHandlerRoleLabel && (
+                    <span className="text-[10px] text-gray-500 px-1 py-0.5 rounded bg-bg-tertiary/50 ml-1">
+                      {lastHandlerRoleLabel}
+                    </span>
+                  )}
+                </span>
+              </div>
+              <div className="flex items-center gap-2 text-[11px]">
+                <Clock size={12} className="text-accent-yellow shrink-0" />
+                <span className="text-gray-400">等待时长：</span>
+                <span className="font-medium text-accent-yellow">{waitDuration}</span>
+              </div>
+            </>
+          )}
         </div>
       ) : (
         <div className="mb-3 p-2.5 rounded-md bg-bg-tertiary/50 space-y-1.5">
@@ -197,6 +266,27 @@ export default function ApprovalCard({ item, type }: ApprovalCardProps) {
               </span>
             )}
           </div>
+          {!isTerminalStatus && (
+            <>
+              <div className="flex items-center gap-2 text-[11px]">
+                <User size={12} className="text-accent-cyan shrink-0" />
+                <span className="text-gray-400">上一处理人：</span>
+                <span className="font-medium text-gray-300">
+                  {lastHandlerName}
+                  {lastHandlerRoleLabel && (
+                    <span className="text-[10px] text-gray-500 px-1 py-0.5 rounded bg-bg-tertiary/50 ml-1">
+                      {lastHandlerRoleLabel}
+                    </span>
+                  )}
+                </span>
+              </div>
+              <div className="flex items-center gap-2 text-[11px]">
+                <Clock size={12} className="text-accent-yellow shrink-0" />
+                <span className="text-gray-400">等待时长：</span>
+                <span className="font-medium text-accent-yellow">{waitDuration}</span>
+              </div>
+            </>
+          )}
         </div>
       )}
 
@@ -213,33 +303,94 @@ export default function ApprovalCard({ item, type }: ApprovalCardProps) {
         </div>
       </div>
 
-      <div className="space-y-1.5 mb-3">
-        {(isRestock ? restockItem.approvalLogs : recallItem.signLogs).map((log, i) => (
-          <div key={i} className="flex items-center gap-2 text-[11px]">
-            <div
-              className="w-5 h-5 rounded-full flex items-center justify-center"
-              style={{ backgroundColor: `${statusColor}20` }}
-            >
-              <User size={10} style={{ color: statusColor }} />
+      {showTimeline ? (
+        expanded && (
+          <div className="mb-3 pl-2">
+            <div className="relative border-l border-gray-600/50 pl-5 ml-1">
+              <div className="mb-4 relative">
+                <div className="absolute -left-[25px] top-1 w-3 h-3 rounded-full bg-accent-cyan border-2 border-bg-primary" />
+                <p className="text-[11px] font-medium text-white">
+                  提交申请
+                </p>
+                <p className="text-[10px] text-gray-500 mt-0.5">
+                  {new Date(item.createTime).toLocaleString('zh-CN')}
+                </p>
+              </div>
+
+              {logs.map((log, i) => (
+                <div key={i} className="mb-4 relative">
+                  <div
+                    className="absolute -left-[25px] top-1 w-3 h-3 rounded-full border-2 border-bg-primary"
+                    style={{ backgroundColor: statusColor }}
+                  />
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-[11px] font-medium text-white">{log.approver}</span>
+                    <span className="text-[10px] text-gray-500 px-1 py-0.5 rounded bg-bg-tertiary/50">
+                      {ROLE_LABELS[log.role]}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-gray-300 mt-0.5">
+                    {log.comment || (i === 0 && isRestock ? '提交申请' : log.comment || '已通过')}
+                  </p>
+                  <p className="text-[10px] text-gray-500 mt-0.5">
+                    {new Date(log.time).toLocaleString('zh-CN')}
+                  </p>
+                </div>
+              ))}
+
+              {isTerminalStatus && (
+                <div className="mb-4 relative">
+                  <div className="absolute -left-[25px] top-1 w-3 h-3 rounded-full bg-accent-green border-2 border-bg-primary" />
+                  <div className="flex items-center gap-1.5">
+                    <Flag size={12} className="text-accent-green" />
+                    <span className="text-[11px] font-medium text-accent-green">
+                      {item.status === 'approved' || item.status === 'completed' ? '已结束（通过）' : '已结束（驳回/取消）'}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {item.archived && (
+                <div className="relative">
+                  <div className="absolute -left-[25px] top-1 w-3 h-3 rounded-full bg-gray-500 border-2 border-bg-primary" />
+                  <div className="flex items-center gap-1.5">
+                    <Archive size={12} className="text-gray-400" />
+                    <span className="text-[11px] font-medium text-gray-400">已归档</span>
+                  </div>
+                </div>
+              )}
             </div>
-            <span className="text-gray-300">{log.approver}</span>
-            <span className="text-[10px] text-gray-500 px-1 py-0.5 rounded bg-bg-tertiary/50">
-              {ROLE_LABELS[log.role]}
-            </span>
-            <ChevronRight size={10} className="text-gray-500" />
-            <span className="text-gray-400">{log.comment || '已通过'}</span>
-            <span className="text-gray-600 ml-auto">
-              {new Date(log.time).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}
-            </span>
           </div>
-        ))}
-        {canAct && (
-          <div className="flex items-center gap-2 text-[11px] animate-pulse bg-accent-yellow/10 rounded p-1.5 border border-accent-yellow/30">
-            <Clock size={10} className="text-accent-yellow" />
-            <span className="text-accent-yellow font-medium">轮到您处理，请尽快操作</span>
-          </div>
-        )}
-      </div>
+        )
+      ) : (
+        <div className="space-y-1.5 mb-3">
+          {logs.map((log, i) => (
+            <div key={i} className="flex items-center gap-2 text-[11px]">
+              <div
+                className="w-5 h-5 rounded-full flex items-center justify-center"
+                style={{ backgroundColor: `${statusColor}20` }}
+              >
+                <User size={10} style={{ color: statusColor }} />
+              </div>
+              <span className="text-gray-300">{log.approver}</span>
+              <span className="text-[10px] text-gray-500 px-1 py-0.5 rounded bg-bg-tertiary/50">
+                {ROLE_LABELS[log.role]}
+              </span>
+              <ChevronRight size={10} className="text-gray-500" />
+              <span className="text-gray-400">{log.comment || '已通过'}</span>
+              <span className="text-gray-600 ml-auto">
+                {new Date(log.time).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}
+              </span>
+            </div>
+          ))}
+          {canAct && (
+            <div className="flex items-center gap-2 text-[11px] animate-pulse bg-accent-yellow/10 rounded p-1.5 border border-accent-yellow/30">
+              <Clock size={10} className="text-accent-yellow" />
+              <span className="text-accent-yellow font-medium">轮到您处理，请尽快操作</span>
+            </div>
+          )}
+        </div>
+      )}
 
       {canAct && (
         <div className="flex gap-2">

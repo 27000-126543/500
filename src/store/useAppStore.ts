@@ -16,6 +16,10 @@ import {
   ColdStorageAlert,
   EscalationRecord,
   DailyReport,
+  OperationReport,
+  EmergencyReport,
+  AuditLog,
+  AuditAction,
 } from '../types';
 import {
   mockUsers,
@@ -27,6 +31,7 @@ import {
   mockRecallOrders,
   mockAlerts,
   mockFireAlarm,
+  mockAuditLogs,
 } from '../data/mockData';
 import {
   getNextRestockStatus,
@@ -37,7 +42,7 @@ import {
   canViewRestock,
   canViewRecall,
 } from '../utils/approvalEngine';
-import { exportDailyReport } from '../utils/exportExcel';
+import { exportDailyReport, exportOperationDaily, exportEmergencyDaily } from '../utils/exportExcel';
 
 type FilteredData = {
   filteredStalls: Stall[];
@@ -56,6 +61,7 @@ interface AppState {
   recallOrders: RecallOrder[];
   alerts: Alert[];
   fireAlarms: FireAlarm[];
+  auditLogs: AuditLog[];
   selectedObjectId: string | null;
   currentView: ViewMode;
   heatmapVisible: boolean;
@@ -63,7 +69,10 @@ interface AppState {
 
   hasPermission: (perm: PermissionKey) => boolean;
   getFilteredData: () => FilteredData;
-  canAccessPage: (page: 'dashboard' | 'approvals' | 'reports') => boolean;
+  canAccessPage: (page: 'dashboard' | 'approvals' | 'reports' | 'audit') => boolean;
+
+  logAudit: (action: AuditAction, detail?: Partial<AuditLog>) => void;
+  getAuditLogs: () => AuditLog[];
 
   login: (role: UserRole, userId?: string) => void;
   logout: () => void;
@@ -86,6 +95,8 @@ interface AppState {
   deactivateFireAlarm: () => void;
 
   exportReport: () => DailyReport;
+  exportOperationReport: () => OperationReport;
+  exportEmergencyReport: () => EmergencyReport;
   simulateDataUpdate: () => void;
 }
 
@@ -99,6 +110,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   recallOrders: mockRecallOrders,
   alerts: mockAlerts,
   fireAlarms: [mockFireAlarm],
+  auditLogs: mockAuditLogs,
   selectedObjectId: null,
   currentView: 'overview',
   heatmapVisible: true,
@@ -123,7 +135,44 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (page === 'reports') {
       return hasPermission(PermissionConst.VIEW_REPORTS_ALL) || hasPermission(PermissionConst.VIEW_REPORTS_OWN);
     }
+    if (page === 'audit') {
+      return hasPermission(PermissionConst.VIEW_APPROVALS_ALL) || hasPermission(PermissionConst.VIEW_APPROVALS_OWN);
+    }
     return false;
+  },
+
+  logAudit: (action, detail) => {
+    const user = get().currentUser;
+    if (!user) return;
+    const newLog: AuditLog = {
+      id: `audit_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      time: new Date(),
+      userId: user.id,
+      userName: user.name,
+      role: user.role,
+      action,
+      ...detail,
+    };
+    set((state) => ({
+      auditLogs: [newLog, ...state.auditLogs],
+    }));
+  },
+
+  getAuditLogs: () => {
+    const user = get().currentUser;
+    const { auditLogs } = get();
+    if (!user) return [];
+    if (user.role === 'admin' || user.role === 'director') {
+      return auditLogs;
+    }
+    if (user.role === 'merchant') {
+      return auditLogs.filter((log) => log.userId === user.id);
+    }
+    if (user.role === 'supervisor') {
+      const recallActions: AuditAction[] = ['sign_recall', 'reject_recall'];
+      return auditLogs.filter((log) => log.userId === user.id || recallActions.includes(log.action));
+    }
+    return [];
   },
 
   getFilteredData: () => {
@@ -170,10 +219,21 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (userId) {
       user = mockUsers.find((u) => u.id === userId) || user;
     }
-    if (user) set({ currentUser: user });
+    if (user) {
+      set({ currentUser: user });
+      setTimeout(() => {
+        get().logAudit('login', { detail: `${user!.role === 'merchant' ? '商户' : user!.role === 'admin' ? '管理员' : user!.role === 'director' ? '主任' : '食药监'}登录系统` });
+      }, 0);
+    }
   },
 
-  logout: () => set({ currentUser: null, selectedObjectId: null }),
+  logout: () => {
+    const user = get().currentUser;
+    if (user) {
+      get().logAudit('logout', { detail: '退出登录' });
+    }
+    set({ currentUser: null, selectedObjectId: null });
+  },
   setSelectedObject: (id) => set({ selectedObjectId: id }),
   setCurrentView: (view) => set({ currentView: view }),
   toggleHeatmap: () => set((s) => ({ heatmapVisible: !s.heatmapVisible })),
@@ -181,13 +241,18 @@ export const useAppStore = create<AppState>((set, get) => ({
   approveRestock: (id, comment) => {
     const user = get().currentUser;
     if (!user) return;
-    const { hasPermission } = get();
+    const { hasPermission, restockRequests } = get();
     const permKey = user.role === 'merchant'
       ? PermissionConst.APPROVE_RESTOCK_MERCHANT
       : user.role === 'admin'
         ? PermissionConst.APPROVE_RESTOCK_ADMIN
         : PermissionConst.APPROVE_RESTOCK_DIRECTOR;
     if (!hasPermission(permKey)) return;
+
+    const request = restockRequests.find((r) => r.id === id);
+    const actionDetail = request
+      ? `${user.role === 'merchant' ? '提交' : '审批'}补货申请：${request.productName} ${request.quantity}${comment ? ` - ${comment}` : ''}`
+      : '审批补货申请';
 
     set((state) => ({
       restockRequests: state.restockRequests.map((r) => {
@@ -222,18 +287,29 @@ export const useAppStore = create<AppState>((set, get) => ({
         return updated;
       }),
     }));
+
+    get().logAudit('approve_restock', {
+      targetId: id,
+      targetType: 'restock',
+      detail: actionDetail,
+    });
   },
 
   rejectRestock: (id, comment) => {
     const user = get().currentUser;
     if (!user) return;
-    const { hasPermission } = get();
+    const { hasPermission, restockRequests } = get();
     const permKey = user.role === 'merchant'
       ? PermissionConst.APPROVE_RESTOCK_MERCHANT
       : user.role === 'admin'
         ? PermissionConst.APPROVE_RESTOCK_ADMIN
         : PermissionConst.APPROVE_RESTOCK_DIRECTOR;
     if (!hasPermission(permKey)) return;
+
+    const request = restockRequests.find((r) => r.id === id);
+    const actionDetail = request
+      ? `驳回补货申请：${request.productName} ${request.quantity}${comment ? ` - ${comment}` : ' - 驳回'}`
+      : '驳回补货申请';
 
     set((state) => ({
       restockRequests: state.restockRequests.map((r) =>
@@ -250,16 +326,27 @@ export const useAppStore = create<AppState>((set, get) => ({
           : r
       ),
     }));
+
+    get().logAudit('reject_restock', {
+      targetId: id,
+      targetType: 'restock',
+      detail: actionDetail,
+    });
   },
 
   signRecall: (id, comment, completeNote) => {
     const user = get().currentUser;
     if (!user) return;
-    const { hasPermission } = get();
+    const { hasPermission, recallOrders } = get();
     const permKey = user.role === 'supervisor'
       ? PermissionConst.SIGN_RECALL_SUPERVISOR
       : PermissionConst.SIGN_RECALL_ADMIN;
     if (!hasPermission(permKey) && user.role !== 'supervisor') return;
+
+    const order = recallOrders.find((r) => r.id === id);
+    const actionDetail = order
+      ? `签收召回工单：${order.productName} ${order.quantity}${comment ? ` - ${comment}` : ''}${completeNote ? ` - ${completeNote}` : ''}`
+      : '签收召回工单';
 
     set((state) => {
       let newRecallOrders = state.recallOrders.map((r) => {
@@ -295,11 +382,23 @@ export const useAppStore = create<AppState>((set, get) => ({
         stalls: newStalls,
       };
     });
+
+    get().logAudit('sign_recall', {
+      targetId: id,
+      targetType: 'recall',
+      detail: actionDetail,
+    });
   },
 
   rejectRecall: (id, comment) => {
     const user = get().currentUser;
     if (!user) return;
+    const { recallOrders } = get();
+    const order = recallOrders.find((r) => r.id === id);
+    const actionDetail = order
+      ? `取消召回工单：${order.productName} ${order.quantity}${comment ? ` - ${comment}` : ' - 取消'}`
+      : '取消召回工单';
+
     set((state) => ({
       recallOrders: state.recallOrders.map((r) =>
         r.id === id
@@ -315,12 +414,22 @@ export const useAppStore = create<AppState>((set, get) => ({
           : r
       ),
     }));
+
+    get().logAudit('reject_recall', {
+      targetId: id,
+      targetType: 'recall',
+      detail: actionDetail,
+    });
   },
 
   acknowledgeAlert: (id) => {
     const user = get().currentUser;
     if (!user) return;
     if (!get().hasPermission(PermissionConst.ACKNOWLEDGE_ALERT)) return;
+    const { alerts } = get();
+    const alert = alerts.find((a) => a.id === id);
+    const actionDetail = alert ? `确认预警：${alert.message}` : '确认预警';
+
     set((state) => ({
       alerts: state.alerts.map((a) =>
         a.id === id && a.visibleToRoles.includes(user.role)
@@ -328,12 +437,22 @@ export const useAppStore = create<AppState>((set, get) => ({
           : a
       ),
     }));
+
+    get().logAudit('acknowledge_alert', {
+      targetId: id,
+      targetType: 'alert',
+      detail: actionDetail,
+    });
   },
 
   resolveAlert: (id) => {
     const user = get().currentUser;
     if (!user) return;
     if (!get().hasPermission(PermissionConst.ACKNOWLEDGE_ALERT)) return;
+    const { alerts } = get();
+    const alert = alerts.find((a) => a.id === id);
+    const actionDetail = alert ? `处理预警：${alert.message}` : '处理预警';
+
     set((state) => ({
       alerts: state.alerts.map((a) => {
         if (a.id !== id || !a.visibleToRoles.includes(user.role)) return a;
@@ -353,6 +472,12 @@ export const useAppStore = create<AppState>((set, get) => ({
         };
       }),
     }));
+
+    get().logAudit('resolve_alert', {
+      targetId: id,
+      targetType: 'alert',
+      detail: actionDetail,
+    });
   },
 
   escalateColdStorageAlert: (coldStorageId) => {
@@ -595,6 +720,136 @@ export const useAppStore = create<AppState>((set, get) => ({
     };
 
     exportDailyReport(report, workStalls, workInspections, workAlerts, scopeAll);
+
+    get().logAudit('export_report', {
+      detail: scopeAll ? '导出市场运营日报（全量）' : `导出摊位运营日报（${user?.name || ''}）`,
+    });
+
+    return report;
+  },
+
+  exportOperationReport: () => {
+    const user = get().currentUser;
+    const { hasPermission, getFilteredData } = get();
+    const { filteredStalls, filteredRestockRequests } = getFilteredData();
+    const { stalls, inspections, restockRequests } = get();
+
+    const scopeAll = hasPermission(PermissionConst.EXPORT_REPORT_ALL);
+    const workStalls = scopeAll ? stalls : filteredStalls;
+    const workInspections = scopeAll
+      ? inspections
+      : inspections.filter((i) => workStalls.some((s) => s.id === i.stallId));
+    const workRestocks = scopeAll ? restockRequests : filteredRestockRequests;
+
+    const totalSales = workStalls.reduce((sum, s) => sum + s.salesToday, 0);
+    const totalPassenger = Math.round(workStalls.reduce((sum, s) => sum + s.passengerHeat * 10, 0));
+    const inspectionCount = workInspections.length;
+    const unqualifiedCount = workInspections.filter((i) => i.overallResult === 'fail').length;
+    const unqualifiedRate = inspectionCount > 0 ? (unqualifiedCount / inspectionCount) * 100 : 0;
+    const avgPassengerHeat = workStalls.length > 0
+      ? Math.round(workStalls.reduce((sum, s) => sum + s.passengerHeat, 0) / workStalls.length)
+      : 0;
+    const lowStockStallCount = workStalls.filter((s) => s.status === 'lowStock').length;
+    const normalStallCount = workStalls.filter((s) => s.status === 'normal').length;
+
+    const report: OperationReport = {
+      date: new Date().toISOString().split('T')[0],
+      scope: scopeAll ? 'all' : 'merchant',
+      merchantId: scopeAll ? undefined : user?.id,
+      merchantName: scopeAll ? undefined : user?.name,
+      totalSales,
+      totalPassenger,
+      inspectionCount,
+      unqualifiedCount,
+      unqualifiedRate,
+      restockRequestCount: workRestocks.length,
+      restockApprovedCount: workRestocks.filter((r) => r.status === 'approved').length,
+      lowStockStallCount,
+      normalStallCount,
+      avgPassengerHeat,
+    };
+
+    exportOperationDaily(report, workStalls, workInspections, workRestocks, scopeAll);
+
+    get().logAudit('export_report', {
+      detail: scopeAll ? '导出运营日报（全量）' : `导出运营日报（${user?.name || ''}）`,
+    });
+
+    return report;
+  },
+
+  exportEmergencyReport: () => {
+    const user = get().currentUser;
+    const { hasPermission, getFilteredData } = get();
+    const { filteredAlerts, filteredRecallOrders } = getFilteredData();
+    const { stalls, alerts, coldStorages, recallOrders } = get();
+
+    const scopeAll = hasPermission(PermissionConst.EXPORT_REPORT_ALL);
+    const workStallIds = scopeAll ? stalls.map((s) => s.id) : getFilteredData().filteredStalls.map((s) => s.id);
+    const workAlerts = scopeAll
+      ? alerts
+      : filteredAlerts.filter((a) => {
+          if (a.type === 'inventory' || a.type === 'inspection') {
+            return workStallIds.includes(a.targetId);
+          }
+          return true;
+        });
+    const workRecalls = scopeAll ? recallOrders : filteredRecallOrders;
+    const workColdStorages = scopeAll ? coldStorages : [];
+
+    const coldStorageAlertList = scopeAll
+      ? coldStorages.flatMap((cs) => [
+          ...cs.alertHistory,
+          ...(cs.currentAlert ? [cs.currentAlert] : []),
+        ])
+      : [];
+    const coldStorageAlerts = coldStorageAlertList.length;
+    const coldStorageEscalated = coldStorageAlertList.reduce(
+      (sum, a) => sum + (a.escalationRecords?.length || 0),
+      0
+    );
+    const nonColdStorageEscalated = workAlerts
+      .filter((a) => a.type !== 'coldstorage')
+      .reduce((sum, a) => sum + (a.escalationRecords?.length || 0), 0);
+
+    const resolvedAlertsWithDuration = workAlerts.filter((a) => a.resolved && a.handlingDurationMinutes);
+    const coldResolvedWithDuration = coldStorageAlertList.filter((a) => a.handlingDurationMinutes);
+    const allDurations = [
+      ...resolvedAlertsWithDuration.map((a) => a.handlingDurationMinutes || 0),
+      ...coldResolvedWithDuration.map((a) => a.handlingDurationMinutes || 0),
+    ];
+    const alertAvgHandlingMinutes = allDurations.length > 0
+      ? Math.round(allDurations.reduce((sum, d) => sum + d, 0) / allDurations.length)
+      : 0;
+
+    const report: EmergencyReport = {
+      date: new Date().toISOString().split('T')[0],
+      scope: scopeAll ? 'all' : 'merchant',
+      merchantId: scopeAll ? undefined : user?.id,
+      merchantName: scopeAll ? undefined : user?.name,
+      emergencyCount: workAlerts.filter((a) => a.level === 'critical' && a.type === 'fire').length,
+      alertCount: workAlerts.length,
+      alertEscalatedCount: coldStorageEscalated + nonColdStorageEscalated,
+      alertAvgHandlingMinutes,
+      alertResolvedCount: workAlerts.filter((a) => a.resolved).length,
+      alertPendingCount: workAlerts.filter((a) => !a.resolved).length,
+      recallOrderCount: workRecalls.length,
+      recallCompletedCount: workRecalls.filter((r) => r.status === 'completed').length,
+      recallTotalQuantity: workRecalls.reduce((sum, r) => sum + r.quantity, 0),
+      recallRecalledQuantity: workRecalls.reduce((sum, r) => sum + r.recalledQuantity, 0),
+      coldStorageAlertCount: coldStorageAlerts,
+      coldStorageEscalatedCount: coldStorageEscalated,
+      coldStorageNormalCount: workColdStorages.filter((cs) => cs.status === 'normal').length,
+      coldStorageWarningCount: workColdStorages.filter((cs) => cs.status === 'warning').length,
+      coldStorageCriticalCount: workColdStorages.filter((cs) => cs.status === 'critical').length,
+    };
+
+    exportEmergencyDaily(report, workAlerts, workRecalls, workColdStorages, scopeAll);
+
+    get().logAudit('export_report', {
+      detail: scopeAll ? '导出应急日报（全量）' : `导出应急日报（${user?.name || ''}）`,
+    });
+
     return report;
   },
 

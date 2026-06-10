@@ -5,9 +5,11 @@ import { heatToColor } from '../../utils/alertEngine';
 interface HeatmapOverlayProps {
   stalls: Stall[];
   visible: boolean;
+  maskedStallIds?: string[];
+  visibleStallIds?: string[];
 }
 
-export default function HeatmapOverlay({ stalls, visible }: HeatmapOverlayProps) {
+export default function HeatmapOverlay({ stalls, visible, maskedStallIds, visibleStallIds }: HeatmapOverlayProps) {
   const zones = useMemo(() => {
     const result: { name: string; heat: number; position: [number, number, number]; size: [number, number] }[] = [];
     const zoneMap: Record<string, Stall[]> = {};
@@ -17,8 +19,14 @@ export default function HeatmapOverlay({ stalls, visible }: HeatmapOverlayProps)
       zoneMap[zone].push(s);
     });
 
+    const isMasked = (stallId: string) => {
+      if (maskedStallIds && maskedStallIds.includes(stallId)) return true;
+      if (visibleStallIds && !visibleStallIds.includes(stallId)) return true;
+      return false;
+    };
+
     Object.entries(zoneMap).forEach(([zone, stallList], i) => {
-      const avgHeat = stallList.reduce((sum, s) => sum + s.passengerHeat, 0) / stallList.length;
+      const avgHeat = stallList.reduce((sum, s) => sum + (isMasked(s.id) ? 50 : s.passengerHeat), 0) / stallList.length;
       const positions = stallList.map((s) => s.position);
       const avgX = positions.reduce((sum, p) => sum + p.x, 0) / positions.length;
       const avgZ = positions.reduce((sum, p) => sum + p.z, 0) / positions.length;
@@ -30,7 +38,7 @@ export default function HeatmapOverlay({ stalls, visible }: HeatmapOverlayProps)
       });
     });
     return result;
-  }, [stalls]);
+  }, [stalls, maskedStallIds, visibleStallIds]);
 
   if (!visible) return null;
 

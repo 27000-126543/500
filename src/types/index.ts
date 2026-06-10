@@ -1,5 +1,31 @@
 export type UserRole = 'merchant' | 'admin' | 'director' | 'supervisor';
 
+export type AuditAction =
+  | 'login'
+  | 'logout'
+  | 'view_page'
+  | 'export_report'
+  | 'approve_restock'
+  | 'reject_restock'
+  | 'sign_recall'
+  | 'reject_recall'
+  | 'acknowledge_alert'
+  | 'resolve_alert'
+  | 'escalate_alert';
+
+export interface AuditLog {
+  id: string;
+  time: Date;
+  userId: string;
+  userName: string;
+  role: UserRole;
+  action: AuditAction;
+  page?: string;
+  targetId?: string;
+  targetType?: string;
+  detail?: string;
+}
+
 export const PermissionConst = {
   VIEW_DASHBOARD_ALL: 'view_dashboard_all',
   VIEW_DASHBOARD_OWN: 'view_dashboard_own',
@@ -252,6 +278,45 @@ export interface DailyReport {
   recallRecalledQuantity: number;
   coldStorageAlertCount: number;
   coldStorageEscalatedCount: number;
+}
+
+export interface OperationReport {
+  date: string;
+  scope: 'all' | 'merchant';
+  merchantId?: string;
+  merchantName?: string;
+  totalSales: number;
+  totalPassenger: number;
+  inspectionCount: number;
+  unqualifiedCount: number;
+  unqualifiedRate: number;
+  restockRequestCount: number;
+  restockApprovedCount: number;
+  lowStockStallCount: number;
+  normalStallCount: number;
+  avgPassengerHeat: number;
+}
+
+export interface EmergencyReport {
+  date: string;
+  scope: 'all' | 'merchant';
+  merchantId?: string;
+  merchantName?: string;
+  emergencyCount: number;
+  alertCount: number;
+  alertEscalatedCount: number;
+  alertAvgHandlingMinutes: number;
+  alertResolvedCount: number;
+  alertPendingCount: number;
+  recallOrderCount: number;
+  recallCompletedCount: number;
+  recallTotalQuantity: number;
+  recallRecalledQuantity: number;
+  coldStorageAlertCount: number;
+  coldStorageEscalatedCount: number;
+  coldStorageNormalCount: number;
+  coldStorageWarningCount: number;
+  coldStorageCriticalCount: number;
 }
 
 export type ViewMode = 'overview' | 'stalls' | 'coldstorage' | 'inspection' | 'parking' | 'monitor';
